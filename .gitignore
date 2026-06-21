@@ -1,10 +1,8 @@
 # 连接凭据（含明文密码）—— 绝不纳入版本管理
 info.txt
 
-# 摄像头测试抓拍（可随时重新生成）
-cam_test.jpg
-cam_snap.jpg
-cam_remote_check.jpg
+# 摄像头/IMU 测试抓拍（可随时重新生成）
+*.jpg
 
 # 运行日志 / 临时文件
 *.log
