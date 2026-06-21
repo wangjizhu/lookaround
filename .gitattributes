@@ -1,0 +1,11 @@
+# 脚本运行在 Linux 目标机（Orange Pi），强制 LF 换行，避免 CRLF 破坏 shebang/bash
+*.py   text eol=lf
+*.sh   text eol=lf
+
+# 文档按文本处理
+*.md   text
+*.html text
+
+# 二进制文件不做换行/diff 处理
+*.pdf  binary
+*.jpg  binary

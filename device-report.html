@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>设备信息报告 - orangepi6plus</title>
+<style>
+  @page { size: A4; margin: 16mm 14mm; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: "Microsoft YaHei", "Segoe UI", "PingFang SC", sans-serif;
+    color: #1f2933; font-size: 12px; line-height: 1.55; margin: 0;
+  }
+  h1 { font-size: 24px; margin: 0; letter-spacing: 1px; }
+  .header {
+    background: linear-gradient(135deg, #0f3d3e 0%, #157a6e 100%);
+    color: #fff; padding: 22px 26px; border-radius: 10px; margin-bottom: 18px;
+  }
+  .header .sub { font-size: 13px; opacity: .9; margin-top: 6px; }
+  .header .meta { font-size: 11px; opacity: .8; margin-top: 10px; }
+  .badge {
+    display: inline-block; background: rgba(255,255,255,.18); border: 1px solid rgba(255,255,255,.35);
+    padding: 2px 10px; border-radius: 20px; font-size: 11px; margin-right: 6px;
+  }
+  h2 {
+    font-size: 15px; color: #0f3d3e; border-left: 4px solid #157a6e;
+    padding-left: 10px; margin: 22px 0 10px; page-break-after: avoid;
+  }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 6px; }
+  th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid #e4e7eb; vertical-align: top; }
+  th { background: #f5f7fa; color: #52606d; font-weight: 600; width: 26%; white-space: nowrap; }
+  td code, .mono { font-family: Consolas, "Courier New", monospace; font-size: 11px; }
+  .kv th { width: 22%; }
+  .card {
+    border: 1px solid #e4e7eb; border-radius: 8px; padding: 0; margin-bottom: 14px;
+    overflow: hidden; page-break-inside: avoid;
+  }
+  .card-head {
+    background: #f0f4f8; padding: 10px 14px; display: flex; align-items: center; justify-content: space-between;
+    border-bottom: 1px solid #e4e7eb;
+  }
+  .card-head .name { font-size: 13px; font-weight: 700; color: #102a43; }
+  .card-head .tag { font-size: 10px; color: #fff; background: #157a6e; padding: 2px 9px; border-radius: 12px; }
+  .card-head .tag.serial { background: #2b6cb0; }
+  .card-head .tag.input { background: #805ad5; }
+  .card-head .tag.video { background: #c05621; }
+  .card table td, .card table th { border-bottom: 1px solid #eef1f4; padding: 5px 14px; }
+  .card table tr:last-child td, .card table tr:last-child th { border-bottom: none; }
+  .icon { font-size: 16px; margin-right: 8px; }
+  .note { background: #fffbea; border: 1px solid #fce588; border-radius: 6px; padding: 9px 12px; font-size: 11px; color: #8d6708; margin: 8px 0; }
+  .ok { color: #0a7d46; font-weight: 600; }
+  .muted { color: #9aa5b1; }
+  .footer { margin-top: 24px; padding-top: 10px; border-top: 1px solid #e4e7eb; font-size: 10px; color: #9aa5b1; text-align: center; }
+  .grid2 { display: flex; gap: 14px; }
+  .grid2 > div { flex: 1; }
+  .summary-pills span {
+    display:inline-block; background:#e6f4f1; color:#0f3d3e; border:1px solid #b8e0d8;
+    border-radius:6px; padding:4px 9px; margin:2px 4px 2px 0; font-size:11px;
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>设备信息报告</h1>
+  <div class="sub">主机 <strong>orangepi6plus</strong> · Orange Pi 6 Plus 开发板</div>
+  <div class="meta">
+    <span class="badge">Ubuntu 24.04 LTS</span>
+    <span class="badge">ARM64 / aarch64</span>
+    <span class="badge">12 核 CPU</span>
+    <span class="badge">30 GiB 内存</span>
+    <span class="badge">USB 外设 ×4</span>
+  </div>
+  <div class="meta">生成时间：2026-06-21　·　采集方式：SSH dashuai@10.8.0.34（VPN 隧道）</div>
+</div>
+
+<h2>一、系统概览</h2>
+<table class="kv">
+  <tr><th>主机名</th><td>orangepi6plus</td></tr>
+  <tr><th>机型</th><td>Orange Pi 6 Plus（CIX SKY1 / Phecda SoC）</td></tr>
+  <tr><th>操作系统</th><td>Ubuntu 24.04.3 LTS (Noble Numbat) — Orange Pi 1.0.2 镜像</td></tr>
+  <tr><th>内核版本</th><td class="mono">Linux 6.6.89-cix #90 SMP PREEMPT aarch64</td></tr>
+  <tr><th>处理器</th><td>12 核 ARM big.LITTLE 架构：<br>· 8 × Cortex-A720（大核，最高 2.6 GHz）<br>· 4 × Cortex-A520（小核，最高 1.8 GHz）</td></tr>
+  <tr><th>内存</th><td>30 GiB（已用 10 GiB / 空闲 19 GiB / 缓存 1.8 GiB）；无 Swap</td></tr>
+  <tr><th>CPU 温度</th><td><span class="ok">45 – 47 °C</span>（13 个温区，运行正常）</td></tr>
+  <tr><th>运行时长</th><td>1 小时 04 分　·　4 个登录用户　·　负载 2.32 / 2.14 / 2.13</td></tr>
+</table>
+
+<h2>二、存储</h2>
+<table class="kv">
+  <tr><th>硬盘</th><td>NVMe 固态盘 <strong>Colorful CN600 1TB</strong>（接口 PCIe / NVMe，容量 953.9 GiB）</td></tr>
+  <tr><th>分区</th><td class="mono">nvme0n1p1 → 200 MB（EFI）　|　nvme0n1p2 → 944.1 GiB → 挂载于 /</td></tr>
+  <tr><th>根分区用量</th><td>总 886 GiB，已用 <strong>18 GiB</strong>，可用 831 GiB（<span class="ok">3%</span>，空间充足）</td></tr>
+</table>
+<div class="note">⚠️ 系统盘走 PCIe/NVMe，<strong>不占用 USB</strong>；USB 总线上没有 U 盘 / 移动硬盘等存储设备。</div>
+
+<h2>三、网络</h2>
+<table>
+  <tr><th>接口</th><th style="width:auto">地址</th><th style="width:18%">状态</th><th style="width:26%">说明</th></tr>
+  <tr><td class="mono">enp97s0</td><td class="mono">192.168.111.93/24</td><td><span class="ok">UP</span></td><td>主有线网口（默认网关 192.168.111.1）</td></tr>
+  <tr><td class="mono">tun0</td><td class="mono">10.8.0.34 ↔ 10.8.0.33</td><td><span class="ok">UP</span></td><td>VPN 隧道（本次 SSH 连接通道）</td></tr>
+  <tr><td class="mono">enp49s0</td><td class="muted">—</td><td class="muted">DOWN</td><td>第二有线网口（未接线）</td></tr>
+</table>
+
+<h2>四、USB 设备明细</h2>
+<div class="summary-pills">
+  <span>🔌 串口转换器 CP2102N</span>
+  <span>📷 摄像头 Logitech C920</span>
+  <span>🖱️ 鼠标 SIGMACHIP</span>
+  <span>⌨️ 键盘 SEM</span>
+</div>
+<p style="font-size:11px;color:#52606d;margin:6px 0 14px;">
+  主板提供 12 个 USB 根集线器（4 个 USB 3.0 @10 Gbps + 8 个 USB 2.0 @480 Mbps）。
+  以下为实际接入的 4 个外设（已排除根集线器）。
+</p>
+
+<div class="card">
+  <div class="card-head">
+    <span class="name"><span class="icon">🔌</span>USB 转串口适配器 — Silicon Labs CP2102N</span>
+    <span class="tag serial">含序列号</span>
+  </div>
+  <table>
+    <tr><th>产品名称</th><td>CP2102N USB to UART Bridge Controller</td></tr>
+    <tr><th>厂商 / VID:PID</th><td class="mono">Silicon Labs　·　10c4:ea60</td></tr>
+    <tr><th>序列号</th><td class="mono">6828af5f1ff0ef11a961535a6d9880ab</td></tr>
+    <tr><th>设备节点</th><td class="mono">/dev/ttyUSB0</td></tr>
+    <tr><th>内核驱动</th><td class="mono">cp210x</td></tr>
+    <tr><th>速率 / 功耗</th><td>12 Mbps（USB 1.1 全速）　·　100 mA</td></tr>
+    <tr><th>总线位置</th><td class="mono">Bus 005 · 拓扑 5-1（bcdDevice 01.00）</td></tr>
+    <tr><th>用途</th><td>USB 转 TTL 串口，常用于单片机/设备的串口调试与通信</td></tr>
+  </table>
+</div>
+
+<div class="card">
+  <div class="card-head">
+    <span class="name"><span class="icon">📷</span>高清摄像头 — Logitech HD Pro Webcam C920</span>
+    <span class="tag video">视频+音频</span>
+  </div>
+  <table>
+    <tr><th>产品名称</th><td>HD Pro Webcam C920（罗技）</td></tr>
+    <tr><th>厂商 / VID:PID</th><td class="mono">Logitech, Inc.　·　046d:082d</td></tr>
+    <tr><th>序列号</th><td class="mono">A2515E2F</td></tr>
+    <tr><th>设备节点</th><td class="mono">视频：/dev/video0、/dev/video1　|　音频：声卡 0 [C920]</td></tr>
+    <tr><th>内核驱动</th><td class="mono">uvcvideo（视频）　+　snd-usb-audio（麦克风）</td></tr>
+    <tr><th>接口构成</th><td>复合设备：2 × Video 接口 + 2 × Audio 接口（Class = EF 复合）</td></tr>
+    <tr><th>速率 / 功耗</th><td>480 Mbps（USB 2.0 高速）　·　500 mA</td></tr>
+    <tr><th>总线位置</th><td class="mono">Bus 007 · 拓扑 7-1（bcdDevice 00.11）</td></tr>
+    <tr><th>用途</th><td>1080p 网络摄像头，自带麦克风，可用于视频采集/会议/视觉应用</td></tr>
+  </table>
+</div>
+
+<div class="card">
+  <div class="card-head">
+    <span class="name"><span class="icon">🖱️</span>USB 鼠标 — SIGMACHIP</span>
+    <span class="tag input">输入设备</span>
+  </div>
+  <table>
+    <tr><th>产品名称</th><td>SiGma Micro Usb Mouse</td></tr>
+    <tr><th>厂商 / VID:PID</th><td class="mono">SIGMACHIP　·　1c4f:0048</td></tr>
+    <tr><th>序列号</th><td class="muted">无</td></tr>
+    <tr><th>设备节点</th><td class="mono">/dev/input/by-id/usb-SIGMACHIP_Usb_Mouse-event-mouse</td></tr>
+    <tr><th>内核驱动</th><td class="mono">usbhid</td></tr>
+    <tr><th>速率 / 功耗</th><td>1.5 Mbps（USB 低速）　·　98 mA</td></tr>
+    <tr><th>总线位置</th><td class="mono">Bus 009 · 拓扑 9-1（bcdDevice 01.30）</td></tr>
+  </table>
+</div>
+
+<div class="card">
+  <div class="card-head">
+    <span class="name"><span class="icon">⌨️</span>USB 键盘 — SEM</span>
+    <span class="tag input">输入设备</span>
+  </div>
+  <table>
+    <tr><th>产品名称</th><td>USB Keyboard</td></tr>
+    <tr><th>厂商 / VID:PID</th><td class="mono">SEM (China Resource Semico)　·　1a2c:0b2a</td></tr>
+    <tr><th>序列号</th><td class="muted">无</td></tr>
+    <tr><th>设备节点</th><td class="mono">/dev/input/by-id/usb-SEM_USB_Keyboard-event-kbd（及 -if01）</td></tr>
+    <tr><th>内核驱动</th><td class="mono">usbhid（2 × HID 接口）</td></tr>
+    <tr><th>速率 / 功耗</th><td>1.5 Mbps（USB 低速）　·　98 mA</td></tr>
+    <tr><th>总线位置</th><td class="mono">Bus 010 · 拓扑 10-1（bcdDevice 01.10）</td></tr>
+  </table>
+</div>
+
+<div class="footer">
+  本报告由 SSH 远程采集生成 · 主机 orangepi6plus (10.8.0.34) · 2026-06-21
+</div>
+
+</body>
+</html>
