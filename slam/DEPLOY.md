@@ -74,9 +74,18 @@ cd ~/slam/stella_vslam_examples/build
 # 停止并存图： touch ~/slam/web/STOP
 ```
 
+## 标定（提升跟踪稳定性与尺度）
+`slam/calib_c920.py`（OpenCV 棋盘格，无显示，自动采集分散视图后标定）：
+```bash
+python3 ~/slam/calib_c920.py --cam 3 --cols 9 --rows 6 --square 25 --need 20
+# 棋盘格：10×7 方格 = 9×6 内角点；提前停止 touch ~/slam/web/CALIB_STOP
+```
+输出 fx/fy/cx/cy/畸变 + 重投影误差 → 替换进 `c920_mono.yaml` 的 Camera 块，再重跑 SLAM。
+
 ## 待办
-- **带运动验证建图**（需在模组旁操作：拿起缓慢平移）。
-- 相机标定（`c920_mono.yaml` 现为 FOV 估算内参 → Kalibr/OpenCV 棋盘格标定，影响精度与尺度）。
+- 相机标定（上节脚本 → 回填 `c920_mono.yaml`）。
+- 监控 / SLAM 固化为 systemd 服务。
 
 ## 验证状态
-- 2026-06-21：g2o + 库 + `run_camera_slam` + `run_camera_web` 原生编译通过；实测 `camera opened 1280x720`、帧被接受、`map.json` 正常导出（静止 state=Initializing、空图，符合单目预期）；网页服务 8091 可达（index.html / map.json 均 200）。**待带运动验证实际建图。**
+- 2026-06-21：原生编译通过（g2o + 库 + run_camera_slam + run_camera_web）；`camera opened 1280x720`、帧接受、map.json 导出、网页 8091 可达。
+- 2026-06-22：**带运动建图成功** —— 单目初始化后稳定 Tracking，地图增长到 **2848 地图点 / 188 关键帧**，瞬丢可自恢复；`map.msg`(13MB) 已存；网页查看器正常显示点云 + 轨迹 + 当前相机。下一步：相机标定。
