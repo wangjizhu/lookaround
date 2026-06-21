@@ -1,25 +1,23 @@
 # stella_vslam 单目配置 — Logitech C920 @ 1280x720
-# ⚠⚠ 内参 fx/fy/cx/cy 与畸变为按 C920 视场角(HFOV≈70.4°,VFOV≈43.3°)估算的占位值。
-#     正式建图前务必用棋盘格标定本机镜头 (ros2 camera_calibration 或 OpenCV)，把真实值填进来——
-#     单目 SLAM 对内参很敏感，估算值只够"先跑通看效果"。
+# 内参已用 OpenCV 棋盘格标定（slam/calib_c920.py，8x5 内角点，19 视图，RMS=0.33px，2026-06-22）。
 
 Camera:
-  name: "Logitech C920 (mono)"
+  name: "Logitech C920 (mono, calibrated)"
   setup: "monocular"
   model: "perspective"
 
-  # 估算值（待标定）：fx=fy≈ (w/2)/tan(HFOV/2)
-  fx: 907.0
-  fy: 907.0
-  cx: 640.0
-  cy: 360.0
+  # 标定值 (RMS 重投影误差 0.33px)
+  fx: 946.8744
+  fy: 951.8796
+  cx: 638.3886
+  cy: 341.3723
 
-  # 畸变（待标定；先置 0）
-  k1: 0.0
-  k2: 0.0
-  p1: 0.0
-  p2: 0.0
-  k3: 0.0
+  # 畸变 (标定)
+  k1: 0.048356
+  k2: -0.202569
+  p1: -0.003028
+  p2: 0.002019
+  k3: 0.183045
 
   fps: 30.0
   cols: 1280
