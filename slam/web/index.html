@@ -1,0 +1,112 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>stella_vslam · 实时地图</title>
+<style>
+*{box-sizing:border-box} html,body{margin:0;height:100%;background:#0d0f12;color:#cdd3da;font-family:system-ui,"Microsoft YaHei",sans-serif;overflow:hidden}
+#bar{position:fixed;top:0;left:0;right:0;height:42px;display:flex;align-items:center;gap:14px;padding:0 14px;background:#11151bdd;border-bottom:1px solid #222;font-size:13px;z-index:10}
+#bar b{color:#7fd1e8} .pill{font-family:Consolas,monospace;background:#0d0f12;border:1px solid #2a3a47;border-radius:5px;padding:2px 8px}
+#st.init{color:#dcb43c} #st.tracking{color:#3ad07a} #st.lost{color:#e0524d}
+#hint{position:fixed;bottom:12px;left:0;right:0;text-align:center;color:#8b95a1;font-size:13px;pointer-events:none}
+canvas{display:block}
+#help{margin-left:auto;color:#6b7682;font-size:12px}
+button{background:#1a2630;color:#cdd3da;border:1px solid #2a3a47;border-radius:5px;padding:3px 9px;cursor:pointer;font-size:12px}
+button:hover{background:#22323e}
+</style></head><body>
+<div id="bar">
+  <b>🛰 stella_vslam 实时地图</b>
+  <span>状态 <span id="st" class="pill init">–</span></span>
+  <span>地图点 <span id="nlm" class="pill">0</span></span>
+  <span>关键帧 <span id="nkf" class="pill">0</span></span>
+  <span>更新 <span id="age" class="pill">–</span></span>
+  <button id="fit">重置视角</button>
+  <span id="help">拖动=旋转 · 滚轮=缩放</span>
+</div>
+<canvas id="c"></canvas>
+<div id="hint"></div>
+<script>
+const cv=document.getElementById('c'), ctx=cv.getContext('2d');
+let W=0,H=0;
+function resize(){ W=cv.width=innerWidth; H=cv.height=innerHeight; }
+addEventListener('resize',resize); resize();
+
+// view state
+let yaw=0.6, pitch=-0.5, zoom=1, base=1, center=[0,0,0], haveFit=false;
+let data={state:'–',n_lm:0,n_kf:0,cam:[0,0,0],traj:[],pts:[]};
+let lastTs=0;
+
+// mouse orbit
+let drag=false, px=0, py=0;
+cv.addEventListener('mousedown',e=>{drag=true;px=e.clientX;py=e.clientY;});
+addEventListener('mouseup',()=>drag=false);
+addEventListener('mousemove',e=>{ if(!drag)return; yaw+=(e.clientX-px)*0.01; pitch+=(e.clientY-py)*0.01;
+  pitch=Math.max(-1.55,Math.min(1.55,pitch)); px=e.clientX; py=e.clientY; });
+cv.addEventListener('wheel',e=>{ e.preventDefault(); zoom*=Math.exp(-e.deltaY*0.001); zoom=Math.max(0.05,Math.min(50,zoom)); },{passive:false});
+document.getElementById('fit').onclick=()=>{ haveFit=false; yaw=0.6; pitch=-0.5; zoom=1; };
+
+function fit(){
+  const all=data.pts.concat(data.traj);
+  if(all.length<2) return;
+  let lo=[1e9,1e9,1e9], hi=[-1e9,-1e9,-1e9];
+  for(const p of all) for(let i=0;i<3;i++){ lo[i]=Math.min(lo[i],p[i]); hi[i]=Math.max(hi[i],p[i]); }
+  center=[(lo[0]+hi[0])/2,(lo[1]+hi[1])/2,(lo[2]+hi[2])/2];
+  const ext=Math.max(hi[0]-lo[0],hi[1]-lo[1],hi[2]-lo[2],1e-3);
+  base=Math.min(W,H)*0.42/(ext/2);
+  haveFit=true;
+}
+function project(p){
+  const dx=p[0]-center[0], dy=p[1]-center[1], dz=p[2]-center[2];
+  const ca=Math.cos(yaw), sa=Math.sin(yaw), cb=Math.cos(pitch), sb=Math.sin(pitch);
+  const x1=dx*ca+dz*sa, y1=dy, z1=-dx*sa+dz*ca;
+  const x2=x1, y2=y1*cb-z1*sb, z2=y1*sb+z1*cb;
+  const S=base*zoom;
+  return [W/2+x2*S, H/2-y2*S, z2];
+}
+function draw(){
+  ctx.fillStyle='#0d0f12'; ctx.fillRect(0,0,W,H);
+  if(!haveFit) fit();
+  // landmarks
+  const pts=data.pts;
+  for(let i=0;i<pts.length;i++){
+    const q=project(pts[i]);
+    if(q[0]<0||q[0]>W||q[1]<0||q[1]>H) continue;
+    const d=q[2];
+    const t=Math.max(0,Math.min(1,(d+ (1/(base*zoom))*200)/( (1/(base*zoom))*400 )));
+    ctx.fillStyle='rgba('+(90+120*t|0)+','+(180-40*t|0)+','+(255-60*t|0)+',0.85)';
+    ctx.fillRect(q[0],q[1],1.6,1.6);
+  }
+  // trajectory (keyframe centers)
+  if(data.traj.length>1){
+    ctx.strokeStyle='#46d36a'; ctx.lineWidth=1.5; ctx.beginPath();
+    for(let i=0;i<data.traj.length;i++){ const q=project(data.traj[i]); i?ctx.lineTo(q[0],q[1]):ctx.moveTo(q[0],q[1]); }
+    ctx.stroke();
+    for(const k of data.traj){ const q=project(k); ctx.fillStyle='#46d36a'; ctx.fillRect(q[0]-1.5,q[1]-1.5,3,3); }
+  }
+  // current camera
+  const c=project(data.cam);
+  ctx.fillStyle='#ff5a5a'; ctx.beginPath(); ctx.arc(c[0],c[1],5,0,7); ctx.fill();
+  ctx.strokeStyle='#ff5a5a55'; ctx.beginPath(); ctx.arc(c[0],c[1],9,0,7); ctx.stroke();
+  requestAnimationFrame(draw);
+}
+requestAnimationFrame(draw);
+
+async function poll(){
+  try{
+    const r=await fetch('map.json?t='+Date.now(),{cache:'no-store'});
+    if(r.ok){
+      const j=await r.json();
+      // refit when the map first appears or grows a lot
+      const grew = j.n_lm>0 && (data.n_lm===0 || j.n_lm>data.n_lm*1.6);
+      data=j; lastTs=Date.now();
+      if(grew) haveFit=false;
+      const st=document.getElementById('st');
+      st.textContent=j.state; st.className='pill '+( /track/i.test(j.state)?'tracking': /lost/i.test(j.state)?'lost':'init');
+      document.getElementById('nlm').textContent=j.n_lm;
+      document.getElementById('nkf').textContent=j.n_kf;
+      document.getElementById('hint').textContent = j.n_lm>0 ? '' : '地图为空 —— 拿起模组缓慢平移（不要只转），对准纹理丰富处以初始化';
+    }
+  }catch(e){}
+  setTimeout(poll,400);
+}
+poll();
+setInterval(()=>{ const a=lastTs?((Date.now()-lastTs)/1000).toFixed(1)+'s':'–'; document.getElementById('age').textContent=a; },300);
+</script></body></html>

@@ -59,9 +59,24 @@ cd ~/slam/stella_vslam_examples/build
 - **单目必须“移动”相机**（平移产生视差）才会初始化建图；静止只停在初始化。
 - `Ctrl-C`/SIGINT 退出时把地图存到 `map.msg`（`--map-db-in map.msg --disable-mapping` 可纯定位回放）。
 
+## M2 实时网页可视化（自研轻量版，已部署）
+> 不用官方 SocketViewer（其 protobuf/Node/npm 在本机被墙网络上很痛）。改为：SLAM 进程导出 JSON + Python 静态服务 + 无依赖 canvas 网页。
+- **`run_camera_web`**（源码 `slam/src/run_camera_web.cc` → 放进 `stella_vslam_examples/src/`，并在其 CMakeLists 加两行：
+  `add_executable(run_camera_web src/run_camera_web.cc)` 与 `list(APPEND EXECUTABLE_TARGETS run_camera_web)`）：
+  每 N 帧把 landmarks + 关键帧轨迹 + 当前相机 + 跟踪状态写到 `~/slam/web/map.json`（原子写）；`touch ~/slam/web/STOP` 优雅退出并存图。
+- 网页 `slam/web/index.html`：canvas 三维点云 + 轨迹，鼠标拖动旋转 / 滚轮缩放，每 400ms 拉 `map.json`。
+- 静态服务（已常驻）：`python3 -m http.server 8091 --directory ~/slam/web`。
+
+### 一键运行（Pi 上）
+```bash
+~/slam/run_web_slam.sh        # 停相机服务 + 启 SLAM（必须带运动才会建图）
+# 浏览器看： http://<pi-ip>:8091/
+# 停止并存图： touch ~/slam/web/STOP
+```
+
 ## 待办
-- **M2 实时网页可视化**（SocketViewer：protobuf + socket.io-client-cpp + socket_publisher + Node 服务 → 浏览器看建图）。
-- 相机标定（`c920_mono.yaml` 现为 FOV 估算内参 → Kalibr/OpenCV 棋盘格标定）。
+- **带运动验证建图**（需在模组旁操作：拿起缓慢平移）。
+- 相机标定（`c920_mono.yaml` 现为 FOV 估算内参 → Kalibr/OpenCV 棋盘格标定，影响精度与尺度）。
 
 ## 验证状态
-- 2026-06-21：g2o + 库 + 运行程序原生编译通过；`run_camera_slam` 实测 **`camera opened 1280x720`**、帧被接受、SLAM 各模块正常启动（静止未建图，符合单目预期）。下一步需带运动验证建图 + 上 viewer。
+- 2026-06-21：g2o + 库 + `run_camera_slam` + `run_camera_web` 原生编译通过；实测 `camera opened 1280x720`、帧被接受、`map.json` 正常导出（静止 state=Initializing、空图，符合单目预期）；网页服务 8091 可达（index.html / map.json 均 200）。**待带运动验证实际建图。**
