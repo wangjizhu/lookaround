@@ -1,0 +1,18 @@
+diff --git a/src/run_camera_slam.cc b/src/run_camera_slam.cc
+index 9883f64..f8d921f 100644
+--- a/src/run_camera_slam.cc
++++ b/src/run_camera_slam.cc
+@@ -109,7 +109,12 @@ int mono_tracking(const std::shared_ptr<stella_vslam::system>& slam,
+     }
+ #endif
+
+-    auto video = cv::VideoCapture(cam_num);
++    auto video = cv::VideoCapture(cam_num, cv::CAP_V4L2);
++        // force MJPG 1280x720 to match c920_mono.yaml (OpenCV opens 640x480 by default)
++        video.set(cv::CAP_PROP_FOURCC, cv::VideoWriter::fourcc('M', 'J', 'P', 'G'));
++        video.set(cv::CAP_PROP_FRAME_WIDTH, 1280);
++        video.set(cv::CAP_PROP_FRAME_HEIGHT, 720);
++        spdlog::info("camera opened {}x{}", (int)video.get(cv::CAP_PROP_FRAME_WIDTH), (int)video.get(cv::CAP_PROP_FRAME_HEIGHT));
+     if (!video.isOpened()) {
+         spdlog::critical("cannot open a camera {}", cam_num);
+         slam->shutdown();
