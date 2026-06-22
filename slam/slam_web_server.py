@@ -117,7 +117,8 @@ def start_slam():
         return False, 'already_running'
     _view_map = None  # 进入建图，退出观察模式
     subprocess.run(['pkill', '-f', 'cam_imu_server'], capture_output=True)  # 释放 /dev/video3
-    for f in ('STOP', 'RESET'):
+    # 删掉 map.json：相机就绪+首帧后 run_camera_web 才会重新写，网页据此结束"启动中"蒙板
+    for f in ('STOP', 'RESET', 'map.json'):
         try:
             os.remove(os.path.join(WEBDIR, f))
         except Exception:

@@ -36,6 +36,11 @@ body.m-idle #chooser{display:flex}
 .mapitem:hover{background:#16253a;border-color:#5a9bff}
 .mapitem .nm{font-weight:600} .mapitem .sz{color:#8b95a1;font-family:Consolas,monospace;font-size:12px}
 .empty{color:#8b95a1;text-align:center;padding:10px}
+/* 加载蒙板 + 旋转指示 */
+#loading{position:fixed;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;gap:14px;z-index:30;background:#0a0c0fdd}
+#loading .spin{width:44px;height:44px;border:4px solid #2a3a47;border-top-color:#5a9bff;border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+#loading .lmsg{color:#cdd3da;font-size:14px;max-width:80%;text-align:center}
 </style></head><body>
 <div id="bar">
   <b>🛰 lookaround</b>
@@ -53,6 +58,7 @@ body.m-idle #chooser{display:flex}
 <canvas id="c"></canvas>
 <div id="frame"></div>
 <div id="hint"></div>
+<div id="loading"><div class="spin"></div><div class="lmsg">处理中…</div></div>
 
 <div id="chooser">
   <div class="card" id="card-modes">
@@ -93,12 +99,27 @@ async function api(p){ try{ const r=await fetch(p); return await r.json(); }catc
 let lastMode=null, lastMap=null;
 async function applyStatus(){ const j=await api('/status'); if(!j) return; const mo=j.mode||'idle';
   if(mo!==lastMode || j.map!==lastMap){ lastMode=mo; lastMap=j.map; setMode(mo, j.map); } }  // 仅变化时重渲染，避免闪烁/吞点击
+// ---- 加载蒙板 ----
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+function showLoading(msg){ $('loading').querySelector('.lmsg').textContent=msg||'处理中…'; $('loading').style.display='flex'; }
+function hideLoading(){ $('loading').style.display='none'; }
+async function waitFor(cond, timeoutMs){ const t0=Date.now(); while(Date.now()-t0<timeoutMs){ if(await cond())return true; await sleep(250);} return false; }
+async function mapJsonReady(){ try{ const r=await fetch('map.json?t='+Date.now(),{cache:'no-store'}); return r.ok; }catch(e){ return false; } }
 
-$('reset').onclick=async()=>{ if(confirm('清空当前地图、从头重新建图？(SLAM 不停，回初始化)')) await api('/reset'); };
-$('stop').onclick=async()=>{ if(confirm('停止 SLAM 并存图？(进程退出)')){ await api('/stop'); setTimeout(applyStatus,300); } };
+$('reset').onclick=async()=>{ if(!confirm('清空当前地图、从头重新建图？(SLAM 不停，回初始化)'))return; showLoading('正在清空地图…'); await api('/reset'); await sleep(900); hideLoading(); };
+$('stop').onclick=async()=>{ if(!confirm('停止 SLAM 并存图？(进程退出，可再点 采集建图)'))return;
+  showLoading('正在保存地图并停止…'); await api('/stop');
+  await waitFor(async()=>{ const j=await api('/status'); if(j&&(j.mode||'idle')==='idle'){lastMode='idle';lastMap=j.map;setMode('idle',j.map);return true;} return false; }, 30000);
+  hideLoading(); };
 $('back').onclick=async()=>{ chooserView='modes'; await api('/close'); applyStatus(); };          // 观察→返回选择
 $('switch').onclick=async()=>{ chooserView='maps'; await api('/close'); applyStatus(); };          // 观察→换一张(直接回列表)
-$('ch-cap').onclick=async()=>{ const j=await api('/start'); if(j&&!j.ok&&j.msg!=='already_running')alert('启动失败: '+j.msg); setTimeout(applyStatus,400); };
+$('ch-cap').onclick=async()=>{
+  showLoading('正在启动相机、首次载入词典（约几秒）…');
+  const j=await api('/start');
+  if(j&&!j.ok&&j.msg!=='already_running'){ hideLoading(); alert('启动失败: '+j.msg); return; }
+  await waitFor(mapJsonReady, 25000);   // 相机就绪+首帧后 map.json 才重新出现
+  await applyStatus(); hideLoading();
+};
 $('ch-view').onclick=()=>{ chooserView='maps'; renderChooser(); loadMapList(); };
 $('ch-back').onclick=()=>{ chooserView='modes'; renderChooser(); };
 
@@ -116,7 +137,7 @@ async function loadMapList(){  // 只在进入"观察"时调用一次
   ml.innerHTML='';
   for(const m of maps){ const d=document.createElement('div'); d.className='mapitem';
     d.innerHTML='<span class="nm">'+m.name+'</span><span class="sz">'+m.mb+' MB</span>';
-    d.onclick=async()=>{ const r=await api('/open?map='+encodeURIComponent(m.name)); if(r&&!r.ok)alert('打开失败: '+r.msg); setTimeout(applyStatus,300); };
+    d.onclick=async()=>{ showLoading('正在载入地图「'+m.name+'」…'); const r=await api('/open?map='+encodeURIComponent(m.name)); if(r&&!r.ok){hideLoading();alert('打开失败: '+r.msg);return;} await applyStatus(); hideLoading(); };
     ml.appendChild(d);
   }
 }
@@ -161,7 +182,7 @@ function draw(){ ctx.fillStyle='#0d0f12'; ctx.fillRect(0,0,W,H); if(!haveFit)fit
 requestAnimationFrame(draw);
 
 async function poll(){ const j=await api('map.json?t='+Date.now());
-  if(j){ const grew=j.n_lm>0&&(data.n_lm===0||j.n_lm>data.n_lm*1.6); data=j; if(grew)haveFit=false;
+  if(j && Array.isArray(j.pts)){ const grew=j.n_lm>0&&(data.n_lm===0||j.n_lm>data.n_lm*1.6); data=j; if(grew)haveFit=false;
     $('nlm').textContent=j.n_lm; $('nkf').textContent=j.n_kf;
     if(running){ const st=$('st'); st.textContent=j.state; st.className='pill '+(/track/i.test(j.state)?'tracking':/lost/i.test(j.state)?'lost':'init');
       $('hint').textContent = j.n_lm>0?'':'地图为空 —— 拿起模组缓慢平移（不要只转），对准纹理处初始化'; }
