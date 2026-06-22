@@ -1,131 +1,126 @@
 <!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>stella_vslam · 实时地图</title>
+<title>lookaround · SLAM 地图</title>
 <style>
 *{box-sizing:border-box} html,body{margin:0;height:100%;background:#0d0f12;color:#cdd3da;font-family:system-ui,"Microsoft YaHei",sans-serif;overflow:hidden}
-#bar{position:fixed;top:0;left:0;right:0;height:42px;display:flex;align-items:center;gap:14px;padding:0 14px;background:#11151bdd;border-bottom:1px solid #222;font-size:13px;z-index:10}
-#bar b{color:#7fd1e8} .pill{font-family:Consolas,monospace;background:#0d0f12;border:1px solid #2a3a47;border-radius:5px;padding:2px 8px}
+#bar{position:fixed;top:0;left:0;right:0;height:44px;display:flex;align-items:center;gap:11px;padding:0 14px;background:#11151bee;border-bottom:1px solid #222;font-size:13px;z-index:10;flex-wrap:nowrap;overflow-x:auto}
+#bar b{color:#7fd1e8;white-space:nowrap} .pill{font-family:Consolas,monospace;background:#0d0f12;border:1px solid #2a3a47;border-radius:5px;padding:2px 8px}
 #st.init{color:#dcb43c} #st.tracking{color:#3ad07a} #st.lost{color:#e0524d}
 #hint{position:fixed;bottom:12px;left:0;right:0;text-align:center;color:#8b95a1;font-size:13px;pointer-events:none}
 canvas{display:block}
-#help{margin-left:auto;color:#6b7682;font-size:12px}
-button{background:#1a2630;color:#cdd3da;border:1px solid #2a3a47;border-radius:5px;padding:3px 9px;cursor:pointer;font-size:12px}
+#help{margin-left:auto;color:#6b7682;font-size:12px;white-space:nowrap}
+button,select{background:#1a2630;color:#cdd3da;border:1px solid #2a3a47;border-radius:5px;padding:3px 9px;cursor:pointer;font-size:12px;white-space:nowrap}
 button:hover{background:#22323e}
+.modepill{font-weight:700;padding:4px 11px;border-radius:6px;white-space:nowrap}
+.modepill.m-idle{background:#2a2f37;color:#cdd3da}
+.modepill.m-map{background:#5a1414;color:#ff9b9b}
+.modepill.m-view{background:#16335a;color:#9bbcff}
+/* 整屏边框：一眼区分模式（红=建图·会改图 / 蓝=观察·只读） */
+#frame{position:fixed;inset:0;pointer-events:none;z-index:8;border:0 solid transparent;transition:border-color .25s,border-width .25s}
+body.m-map #frame{border:5px solid #e0524d}
+body.m-view #frame{border:5px solid #5a9bff}
+#start{border-color:#2c4a7a;color:#9bbcff} #reset{border-color:#7a2c2c;color:#ff9b9b}
+#stop{border-color:#2c6a3a;color:#8be8a3} #open{border-color:#2c4a7a;color:#9bbcff}
 </style></head><body>
 <div id="bar">
-  <b>🛰 stella_vslam 实时地图</b>
-  <span>状态 <span id="st" class="pill init">–</span></span>
-  <span>地图点 <span id="nlm" class="pill">0</span></span>
-  <span>关键帧 <span id="nkf" class="pill">0</span></span>
-  <span>更新 <span id="age" class="pill">–</span></span>
+  <b>🛰 lookaround</b>
+  <span id="mode" class="modepill m-idle">⚪ 空闲</span>
+  <span>状态 <span id="st" class="pill">–</span></span>
+  <span>点 <span id="nlm" class="pill">0</span></span>
+  <span>帧 <span id="nkf" class="pill">0</span></span>
+  <button id="start">▶ 开始采集</button>
+  <button id="reset">🗑 清空地图</button>
+  <button id="stop">💾 停止存图</button>
+  <select id="maps"></select>
+  <button id="open">📂 观察存图</button>
+  <button id="close">↩ 返回</button>
   <button id="fit">复位视角</button>
-  <button id="start" style="border-color:#2c4a7a;color:#9bbcff">▶ 开始采集</button>
-  <button id="reset" style="border-color:#7a2c2c;color:#ff9b9b">🗑 清空地图</button>
-  <button id="stop" style="border-color:#2c6a3a;color:#8be8a3">💾 停止存图</button>
   <span id="help">拖动=旋转 · 滚轮=缩放</span>
 </div>
 <canvas id="c"></canvas>
+<div id="frame"></div>
 <div id="hint"></div>
 <script>
 const cv=document.getElementById('c'), ctx=cv.getContext('2d');
 let W=0,H=0;
 function resize(){ W=cv.width=innerWidth; H=cv.height=innerHeight; }
 addEventListener('resize',resize); resize();
+const $=id=>document.getElementById(id);
+function show(id,v){ $(id).style.display=v?'inline-block':'none'; }
 
-// view state
 let yaw=0.6, pitch=-0.5, zoom=1, base=1, center=[0,0,0], haveFit=false;
 let data={state:'–',n_lm:0,n_kf:0,cam:[0,0,0],traj:[],pts:[]};
-let lastTs=0;
+let lastTs=0, running=false, mode='idle';
 
-// mouse orbit
 let drag=false, px=0, py=0;
 cv.addEventListener('mousedown',e=>{drag=true;px=e.clientX;py=e.clientY;});
 addEventListener('mouseup',()=>drag=false);
 addEventListener('mousemove',e=>{ if(!drag)return; yaw+=(e.clientX-px)*0.01; pitch+=(e.clientY-py)*0.01;
   pitch=Math.max(-1.55,Math.min(1.55,pitch)); px=e.clientX; py=e.clientY; });
 cv.addEventListener('wheel',e=>{ e.preventDefault(); zoom*=Math.exp(-e.deltaY*0.001); zoom=Math.max(0.05,Math.min(50,zoom)); },{passive:false});
-document.getElementById('fit').onclick=()=>{ haveFit=false; yaw=0.6; pitch=-0.5; zoom=1; };
-document.getElementById('reset').onclick=async()=>{ if(confirm('清空当前地图、从头重新建图？(SLAM 不停，回到初始化)')){ try{await fetch('/reset');}catch(e){} } };
-document.getElementById('stop').onclick=async()=>{ if(confirm('停止 SLAM 并存图？(进程会退出，可再点 ▶开始采集 重新开始)')){ try{await fetch('/stop');}catch(e){} } };
-document.getElementById('start').onclick=async()=>{ try{const r=await fetch('/start');const j=await r.json(); if(!j.ok&&j.msg!=='already_running')alert('启动失败: '+j.msg);}catch(e){alert('启动请求失败');} };
-let running=false;
-function setRunning(r){ running=r;
-  document.getElementById('start').style.display=r?'none':'inline-block';
-  document.getElementById('reset').style.display=r?'inline-block':'none';
-  document.getElementById('stop').style.display=r?'inline-block':'none';
-  if(!r){ const st=document.getElementById('st'); st.textContent='未运行'; st.className='pill init';
-    document.getElementById('hint').textContent='相机空闲 —— 点 ▶开始采集 启动 SLAM'; }
-}
-setRunning(false);
-async function pollStatus(){ try{ const r=await fetch('/status'); setRunning((await r.json()).running); }catch(e){} setTimeout(pollStatus,1000); }
-pollStatus();
+$('fit').onclick=()=>{ haveFit=false; yaw=0.6; pitch=-0.5; zoom=1; };
+$('start').onclick=async()=>{ try{const r=await fetch('/start');const j=await r.json(); if(!j.ok&&j.msg!=='already_running')alert('启动失败: '+j.msg);}catch(e){alert('启动请求失败');} };
+$('reset').onclick=async()=>{ if(confirm('清空当前地图、从头重新建图？(SLAM 不停，回初始化)')){ try{await fetch('/reset');}catch(e){} } };
+$('stop').onclick=async()=>{ if(confirm('停止 SLAM 并存图？(进程退出，可再点 ▶开始采集)')){ try{await fetch('/stop');}catch(e){} } };
+$('open').onclick=async()=>{ const m=$('maps').value; if(!m){alert('没有可选的存图(.msg)');return;} try{const r=await fetch('/open?map='+encodeURIComponent(m));const j=await r.json(); if(!j.ok)alert('打开失败: '+j.msg);}catch(e){alert('打开请求失败');} };
+$('close').onclick=async()=>{ try{await fetch('/close');}catch(e){} };
 
-function fit(){
-  const all=data.pts.concat(data.traj);
-  if(all.length<2) return;
+async function loadMaps(){ try{ const r=await fetch('/maps'); const j=await r.json(); const sel=$('maps'); const cur=sel.value;
+  sel.innerHTML=''; for(const m of (j.maps||[])){ const o=document.createElement('option'); o.value=m.name; o.textContent=m.name+' ('+m.mb+'MB)'; sel.appendChild(o);} if(cur)sel.value=cur;
+}catch(e){} }
+loadMaps();
+
+function setMode(mo, mapName){
+  mode=mo; running=(mo==='mapping');
+  document.body.className = 'm-'+(mo==='mapping'?'map':mo==='viewing'?'view':'idle');
+  show('start', mo==='idle'); show('reset', mo==='mapping'); show('stop', mo==='mapping');
+  show('maps', mo!=='mapping'); show('open', mo!=='mapping'); show('close', mo==='viewing');
+  const mp=$('mode');
+  if(mo==='mapping'){ mp.textContent='● 建图中（实时写入地图）'; mp.className='modepill m-map'; }
+  else if(mo==='viewing'){ mp.textContent='👁 观察存图 · 只读'; mp.className='modepill m-view';
+    $('st').textContent='只读'; $('st').className='pill';
+    $('hint').textContent='观察模式：'+(mapName||'')+' —— 只读、不会改动。拖动旋转查看；📂 可换图，↩ 返回。'; }
+  else { mp.textContent='⚪ 空闲'; mp.className='modepill m-idle';
+    $('st').textContent='未运行'; $('st').className='pill';
+    $('hint').textContent='相机空闲 —— ▶ 开始采集 建新图；或选一张存图点 📂 观察存图（只读看旧图）。'; }
+  $('open').textContent = mo==='viewing' ? '📂 换图' : '📂 观察存图';
+}
+setMode('idle', null);
+
+function fit(){ const all=data.pts.concat(data.traj); if(all.length<2)return;
   let lo=[1e9,1e9,1e9], hi=[-1e9,-1e9,-1e9];
-  for(const p of all) for(let i=0;i<3;i++){ lo[i]=Math.min(lo[i],p[i]); hi[i]=Math.max(hi[i],p[i]); }
+  for(const p of all)for(let i=0;i<3;i++){lo[i]=Math.min(lo[i],p[i]);hi[i]=Math.max(hi[i],p[i]);}
   center=[(lo[0]+hi[0])/2,(lo[1]+hi[1])/2,(lo[2]+hi[2])/2];
-  const ext=Math.max(hi[0]-lo[0],hi[1]-lo[1],hi[2]-lo[2],1e-3);
-  base=Math.min(W,H)*0.42/(ext/2);
-  haveFit=true;
+  const ext=Math.max(hi[0]-lo[0],hi[1]-lo[1],hi[2]-lo[2],1e-3); base=Math.min(W,H)*0.42/(ext/2); haveFit=true;
 }
-function project(p){
-  const dx=p[0]-center[0], dy=p[1]-center[1], dz=p[2]-center[2];
-  const ca=Math.cos(yaw), sa=Math.sin(yaw), cb=Math.cos(pitch), sb=Math.sin(pitch);
-  const x1=dx*ca+dz*sa, y1=dy, z1=-dx*sa+dz*ca;
-  const x2=x1, y2=y1*cb-z1*sb, z2=y1*sb+z1*cb;
-  const S=base*zoom;
-  return [W/2+x2*S, H/2-y2*S, z2];
-}
-function draw(){
-  ctx.fillStyle='#0d0f12'; ctx.fillRect(0,0,W,H);
-  if(!haveFit) fit();
-  // landmarks
+function project(p){ const dx=p[0]-center[0],dy=p[1]-center[1],dz=p[2]-center[2];
+  const ca=Math.cos(yaw),sa=Math.sin(yaw),cb=Math.cos(pitch),sb=Math.sin(pitch);
+  const x1=dx*ca+dz*sa,y1=dy,z1=-dx*sa+dz*ca; const x2=x1,y2=y1*cb-z1*sb,z2=y1*sb+z1*cb;
+  const S=base*zoom; return [W/2+x2*S, H/2-y2*S, z2]; }
+function draw(){ ctx.fillStyle='#0d0f12'; ctx.fillRect(0,0,W,H); if(!haveFit)fit();
   const pts=data.pts;
-  for(let i=0;i<pts.length;i++){
-    const q=project(pts[i]);
-    if(q[0]<0||q[0]>W||q[1]<0||q[1]>H) continue;
-    const d=q[2];
-    const t=Math.max(0,Math.min(1,(d+ (1/(base*zoom))*200)/( (1/(base*zoom))*400 )));
-    ctx.fillStyle='rgba('+(90+120*t|0)+','+(180-40*t|0)+','+(255-60*t|0)+',0.85)';
-    ctx.fillRect(q[0],q[1],1.6,1.6);
-  }
-  // trajectory (keyframe centers)
-  if(data.traj.length>1){
-    ctx.strokeStyle='#46d36a'; ctx.lineWidth=1.5; ctx.beginPath();
-    for(let i=0;i<data.traj.length;i++){ const q=project(data.traj[i]); i?ctx.lineTo(q[0],q[1]):ctx.moveTo(q[0],q[1]); }
-    ctx.stroke();
-    for(const k of data.traj){ const q=project(k); ctx.fillStyle='#46d36a'; ctx.fillRect(q[0]-1.5,q[1]-1.5,3,3); }
-  }
-  // current camera
-  const c=project(data.cam);
-  ctx.fillStyle='#ff5a5a'; ctx.beginPath(); ctx.arc(c[0],c[1],5,0,7); ctx.fill();
-  ctx.strokeStyle='#ff5a5a55'; ctx.beginPath(); ctx.arc(c[0],c[1],9,0,7); ctx.stroke();
+  for(let i=0;i<pts.length;i++){ const q=project(pts[i]); if(q[0]<0||q[0]>W||q[1]<0||q[1]>H)continue;
+    const t=Math.max(0,Math.min(1,(q[2]+(1/(base*zoom))*200)/((1/(base*zoom))*400)));
+    ctx.fillStyle='rgba('+(90+120*t|0)+','+(180-40*t|0)+','+(255-60*t|0)+',0.85)'; ctx.fillRect(q[0],q[1],1.6,1.6); }
+  if(data.traj.length>1){ ctx.strokeStyle='#46d36a'; ctx.lineWidth=1.5; ctx.beginPath();
+    for(let i=0;i<data.traj.length;i++){const q=project(data.traj[i]); i?ctx.lineTo(q[0],q[1]):ctx.moveTo(q[0],q[1]);} ctx.stroke();
+    for(const k of data.traj){const q=project(k); ctx.fillStyle='#46d36a'; ctx.fillRect(q[0]-1.5,q[1]-1.5,3,3);} }
+  if(running){ const c=project(data.cam); ctx.fillStyle='#ff5a5a'; ctx.beginPath(); ctx.arc(c[0],c[1],5,0,7); ctx.fill();
+    ctx.strokeStyle='#ff5a5a55'; ctx.beginPath(); ctx.arc(c[0],c[1],9,0,7); ctx.stroke(); }
   requestAnimationFrame(draw);
 }
 requestAnimationFrame(draw);
 
-async function poll(){
-  try{
-    const r=await fetch('map.json?t='+Date.now(),{cache:'no-store'});
-    if(r.ok){
-      const j=await r.json();
-      // refit when the map first appears or grows a lot
-      const grew = j.n_lm>0 && (data.n_lm===0 || j.n_lm>data.n_lm*1.6);
-      data=j; lastTs=Date.now();
-      if(grew) haveFit=false;
-      document.getElementById('nlm').textContent=j.n_lm;
-      document.getElementById('nkf').textContent=j.n_kf;
-      if(running){
-        const st=document.getElementById('st');
-        st.textContent=j.state; st.className='pill '+( /track/i.test(j.state)?'tracking': /lost/i.test(j.state)?'lost':'init');
-        document.getElementById('hint').textContent = j.n_lm>0 ? '' : '地图为空 —— 拿起模组缓慢平移（不要只转），对准纹理丰富处以初始化';
-      }
-    }
-  }catch(e){}
-  setTimeout(poll,400);
-}
+async function poll(){ try{ const r=await fetch('map.json?t='+Date.now(),{cache:'no-store'});
+  if(r.ok){ const j=await r.json(); const grew=j.n_lm>0&&(data.n_lm===0||j.n_lm>data.n_lm*1.6);
+    data=j; lastTs=Date.now(); if(grew)haveFit=false;
+    $('nlm').textContent=j.n_lm; $('nkf').textContent=j.n_kf;
+    if(running){ const st=$('st'); st.textContent=j.state; st.className='pill '+(/track/i.test(j.state)?'tracking':/lost/i.test(j.state)?'lost':'init');
+      $('hint').textContent = j.n_lm>0?'':'地图为空 —— 拿起模组缓慢平移（不要只转），对准纹理处初始化'; }
+  } }catch(e){} setTimeout(poll,400); }
 poll();
-setInterval(()=>{ const a=lastTs?((Date.now()-lastTs)/1000).toFixed(1)+'s':'–'; document.getElementById('age').textContent=a; },300);
+async function pollStatus(){ try{ const r=await fetch('/status'); const j=await r.json(); const mo=j.mode||'idle'; setMode(mo, j.map);
+  if(mo!=='mapping') loadMaps();
+}catch(e){} setTimeout(pollStatus,1200); }
+pollStatus();
 </script></body></html>
