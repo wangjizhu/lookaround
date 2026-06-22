@@ -12,9 +12,39 @@ PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8091
 HOME = os.path.expanduser('~')
 WEBDIR = os.path.abspath(sys.argv[2] if len(sys.argv) > 2 else f'{HOME}/slam/web')
 BIN = f'{HOME}/slam/stella_vslam_examples/build/run_camera_web'
-SLAM_CMD = [BIN, '-v', f'{HOME}/slam/orb_vocab.fbow', '-c', f'{HOME}/slam/c920_mono.yaml',
-            '-n', '3', '--web-dir', WEBDIR, '-o', f'{HOME}/slam/map_calib.msg', '--dump-every', '8']
 ENV = dict(os.environ, LD_LIBRARY_PATH=f'{HOME}/slam/deps/lib')
+
+
+def detect_cam(default=3):
+    """重启后 /dev/videoN 可能变号 —— 自动找 C920(uvcvideo + MJPG 的采集口)。"""
+    import glob
+    cands = []
+    for dev in sorted(glob.glob('/dev/video*')):
+        s = dev[len('/dev/video'):]
+        if not s.isdigit():
+            continue
+        n = int(s)
+        try:
+            drv = os.path.realpath(f'/sys/class/video4linux/video{n}/device/driver')
+        except Exception:
+            continue
+        if 'uvcvideo' not in drv:
+            continue
+        try:
+            out = subprocess.run(['v4l2-ctl', '-d', dev, '--list-formats'],
+                                 capture_output=True, text=True).stdout
+            if 'MJPG' in out or 'Motion-JPEG' in out:
+                return n  # 采集口(支持 MJPG)，优先
+        except Exception:
+            pass
+        cands.append(n)
+    return cands[0] if cands else default
+
+
+def slam_cmd():
+    cam = str(detect_cam(3))
+    return [BIN, '-v', f'{HOME}/slam/orb_vocab.fbow', '-c', f'{HOME}/slam/c920_mono.yaml',
+            '-n', cam, '--web-dir', WEBDIR, '-o', f'{HOME}/slam/map_calib.msg', '--dump-every', '8']
 CT = {'.html': 'text/html; charset=utf-8', '.json': 'application/json',
       '.js': 'text/javascript', '.css': 'text/css'}
 
@@ -37,7 +67,7 @@ def start_slam():
             pass
     try:
         logf = open('/tmp/slam_run.log', 'ab')
-        subprocess.Popen(SLAM_CMD, env=ENV, stdout=logf, stderr=subprocess.STDOUT,
+        subprocess.Popen(slam_cmd(), env=ENV, stdout=logf, stderr=subprocess.STDOUT,
                          stdin=subprocess.DEVNULL, start_new_session=True)
         return True, 'started'
     except Exception as e:
