@@ -9,18 +9,33 @@
 #hint{position:fixed;bottom:12px;left:0;right:0;text-align:center;color:#8b95a1;font-size:13px;pointer-events:none}
 canvas{display:block}
 #help{margin-left:auto;color:#6b7682;font-size:12px;white-space:nowrap}
-button,select{background:#1a2630;color:#cdd3da;border:1px solid #2a3a47;border-radius:5px;padding:3px 9px;cursor:pointer;font-size:12px;white-space:nowrap}
+button{background:#1a2630;color:#cdd3da;border:1px solid #2a3a47;border-radius:5px;padding:3px 9px;cursor:pointer;font-size:12px;white-space:nowrap}
 button:hover{background:#22323e}
 .modepill{font-weight:700;padding:4px 11px;border-radius:6px;white-space:nowrap}
 .modepill.m-idle{background:#2a2f37;color:#cdd3da}
 .modepill.m-map{background:#5a1414;color:#ff9b9b}
 .modepill.m-view{background:#16335a;color:#9bbcff}
+#reset{border-color:#7a2c2c;color:#ff9b9b} #stop{border-color:#2c6a3a;color:#8be8a3}
 /* 整屏边框：一眼区分模式（红=建图·会改图 / 蓝=观察·只读） */
 #frame{position:fixed;inset:0;pointer-events:none;z-index:8;border:0 solid transparent;transition:border-color .25s,border-width .25s}
 body.m-map #frame{border:5px solid #e0524d}
 body.m-view #frame{border:5px solid #5a9bff}
-#start{border-color:#2c4a7a;color:#9bbcff} #reset{border-color:#7a2c2c;color:#ff9b9b}
-#stop{border-color:#2c6a3a;color:#8be8a3} #open{border-color:#2c4a7a;color:#9bbcff}
+/* 空闲选择卡片 */
+#chooser{position:fixed;inset:0;display:none;align-items:center;justify-content:center;z-index:9;background:#0a0c0fcc}
+body.m-idle #chooser{display:flex}
+.card{background:#11151bf7;border:1px solid #2a3a47;border-radius:14px;padding:24px 28px;box-shadow:0 12px 48px #000b}
+.cardhead{display:flex;justify-content:space-between;align-items:center;gap:24px;margin-bottom:16px}
+.cardhead h3{margin:0;font-size:15px;font-weight:600}
+.choices{display:flex;gap:18px}
+.choice{width:150px;height:128px;border-radius:12px;border:1px solid #2a3a47;background:#1a2630;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px}
+.choice .ico{font-size:36px} .choice .t{font-size:15px;font-weight:600} .choice .s{font-size:12px;color:#8b95a1}
+.choice.cap{border-color:#7a3030} .choice.cap:hover{background:#241818;border-color:#e0524d}
+.choice.view{border-color:#2c4a7a} .choice.view:hover{background:#16253a;border-color:#5a9bff}
+.maplist{display:flex;flex-direction:column;gap:9px;min-width:300px}
+.mapitem{display:flex;justify-content:space-between;align-items:center;gap:24px;padding:12px 16px;border:1px solid #2a3a47;border-radius:9px;background:#1a2630;cursor:pointer}
+.mapitem:hover{background:#16253a;border-color:#5a9bff}
+.mapitem .nm{font-weight:600} .mapitem .sz{color:#8b95a1;font-family:Consolas,monospace;font-size:12px}
+.empty{color:#8b95a1;text-align:center;padding:10px}
 </style></head><body>
 <div id="bar">
   <b>🛰 lookaround</b>
@@ -28,18 +43,31 @@ body.m-view #frame{border:5px solid #5a9bff}
   <span>状态 <span id="st" class="pill">–</span></span>
   <span>点 <span id="nlm" class="pill">0</span></span>
   <span>帧 <span id="nkf" class="pill">0</span></span>
-  <button id="start">▶ 开始采集</button>
   <button id="reset">🗑 清空地图</button>
   <button id="stop">💾 停止存图</button>
-  <select id="maps"></select>
-  <button id="open">📂 观察存图</button>
-  <button id="close">↩ 返回</button>
+  <button id="switch">↺ 换一张</button>
+  <button id="back">↩ 返回</button>
   <button id="fit">复位视角</button>
   <span id="help">拖动=旋转 · 滚轮=缩放</span>
 </div>
 <canvas id="c"></canvas>
 <div id="frame"></div>
 <div id="hint"></div>
+
+<div id="chooser">
+  <div class="card" id="card-modes">
+    <div class="cardhead"><h3>要做什么？</h3></div>
+    <div class="choices">
+      <div class="choice cap" id="ch-cap"><div class="ico">📷</div><div class="t">采集建图</div><div class="s">用相机建新图</div></div>
+      <div class="choice view" id="ch-view"><div class="ico">👁</div><div class="t">观察存图</div><div class="s">只读看旧图</div></div>
+    </div>
+  </div>
+  <div class="card" id="card-maps" style="display:none">
+    <div class="cardhead"><h3>观察哪张存图？</h3><button id="ch-back">← 返回</button></div>
+    <div class="maplist" id="maplist"><div class="empty">加载中…</div></div>
+  </div>
+</div>
+
 <script>
 const cv=document.getElementById('c'), ctx=cv.getContext('2d');
 let W=0,H=0;
@@ -50,7 +78,7 @@ function show(id,v){ $(id).style.display=v?'inline-block':'none'; }
 
 let yaw=0.6, pitch=-0.5, zoom=1, base=1, center=[0,0,0], haveFit=false;
 let data={state:'–',n_lm:0,n_kf:0,cam:[0,0,0],traj:[],pts:[]};
-let lastTs=0, running=false, mode='idle';
+let running=false, mode='idle', chooserView='modes';
 
 let drag=false, px=0, py=0;
 cv.addEventListener('mousedown',e=>{drag=true;px=e.clientX;py=e.clientY;});
@@ -59,40 +87,56 @@ addEventListener('mousemove',e=>{ if(!drag)return; yaw+=(e.clientX-px)*0.01; pit
   pitch=Math.max(-1.55,Math.min(1.55,pitch)); px=e.clientX; py=e.clientY; });
 cv.addEventListener('wheel',e=>{ e.preventDefault(); zoom*=Math.exp(-e.deltaY*0.001); zoom=Math.max(0.05,Math.min(50,zoom)); },{passive:false});
 $('fit').onclick=()=>{ haveFit=false; yaw=0.6; pitch=-0.5; zoom=1; };
-$('start').onclick=async()=>{ try{const r=await fetch('/start');const j=await r.json(); if(!j.ok&&j.msg!=='already_running')alert('启动失败: '+j.msg);}catch(e){alert('启动请求失败');} };
-$('reset').onclick=async()=>{ if(confirm('清空当前地图、从头重新建图？(SLAM 不停，回初始化)')){ try{await fetch('/reset');}catch(e){} } };
-$('stop').onclick=async()=>{ if(confirm('停止 SLAM 并存图？(进程退出，可再点 ▶开始采集)')){ try{await fetch('/stop');}catch(e){} } };
-$('open').onclick=async()=>{ const m=$('maps').value; if(!m){alert('没有可选的存图(.msg)');return;} try{const r=await fetch('/open?map='+encodeURIComponent(m));const j=await r.json(); if(!j.ok)alert('打开失败: '+j.msg);}catch(e){alert('打开请求失败');} };
-$('close').onclick=async()=>{ try{await fetch('/close');}catch(e){} };
 
-async function loadMaps(){ try{ const r=await fetch('/maps'); const j=await r.json(); const sel=$('maps'); const cur=sel.value;
-  sel.innerHTML=''; for(const m of (j.maps||[])){ const o=document.createElement('option'); o.value=m.name; o.textContent=m.name+' ('+m.mb+'MB)'; sel.appendChild(o);} if(cur)sel.value=cur;
-}catch(e){} }
-loadMaps();
+// ---- 动作 ----
+async function api(p){ try{ const r=await fetch(p); return await r.json(); }catch(e){ return null; } }
+async function applyStatus(){ const j=await api('/status'); if(j) setMode(j.mode||'idle', j.map); }
+
+$('reset').onclick=async()=>{ if(confirm('清空当前地图、从头重新建图？(SLAM 不停，回初始化)')) await api('/reset'); };
+$('stop').onclick=async()=>{ if(confirm('停止 SLAM 并存图？(进程退出)')){ await api('/stop'); setTimeout(applyStatus,300); } };
+$('back').onclick=async()=>{ chooserView='modes'; await api('/close'); applyStatus(); };          // 观察→返回选择
+$('switch').onclick=async()=>{ chooserView='maps'; await api('/close'); applyStatus(); };          // 观察→换一张(直接回列表)
+$('ch-cap').onclick=async()=>{ const j=await api('/start'); if(j&&!j.ok&&j.msg!=='already_running')alert('启动失败: '+j.msg); setTimeout(applyStatus,400); };
+$('ch-view').onclick=()=>{ chooserView='maps'; renderChooser(); };
+$('ch-back').onclick=()=>{ chooserView='modes'; renderChooser(); };
+
+async function renderChooser(){
+  $('card-modes').style.display = chooserView==='modes' ? 'block':'none';
+  $('card-maps').style.display  = chooserView==='maps'  ? 'block':'none';
+  if(chooserView==='maps'){
+    const ml=$('maplist'); ml.innerHTML='<div class="empty">加载中…</div>';
+    const j=await api('/maps'); const maps=(j&&j.maps)||[];
+    if(!maps.length){ ml.innerHTML='<div class="empty">没有存图(.msg)。先去采集建一张并存图。</div>'; return; }
+    ml.innerHTML='';
+    for(const m of maps){ const d=document.createElement('div'); d.className='mapitem';
+      d.innerHTML='<span class="nm">'+m.name+'</span><span class="sz">'+m.mb+' MB</span>';
+      d.onclick=async()=>{ const r=await api('/open?map='+encodeURIComponent(m.name)); if(r&&!r.ok)alert('打开失败: '+r.msg); setTimeout(applyStatus,300); };
+      ml.appendChild(d);
+    }
+  }
+}
 
 function setMode(mo, mapName){
   mode=mo; running=(mo==='mapping');
-  document.body.className = 'm-'+(mo==='mapping'?'map':mo==='viewing'?'view':'idle');
-  show('start', mo==='idle'); show('reset', mo==='mapping'); show('stop', mo==='mapping');
-  show('maps', mo!=='mapping'); show('open', mo!=='mapping'); show('close', mo==='viewing');
+  document.body.className='m-'+(mo==='mapping'?'map':mo==='viewing'?'view':'idle');
+  show('reset', mo==='mapping'); show('stop', mo==='mapping');
+  show('switch', mo==='viewing'); show('back', mo==='viewing');
   const mp=$('mode');
   if(mo==='mapping'){ mp.textContent='● 建图中（实时写入地图）'; mp.className='modepill m-map'; }
   else if(mo==='viewing'){ mp.textContent='👁 观察存图 · 只读'; mp.className='modepill m-view';
     $('st').textContent='只读'; $('st').className='pill';
-    $('hint').textContent='观察模式：'+(mapName||'')+' —— 只读、不会改动。拖动旋转查看；📂 可换图，↩ 返回。'; }
+    $('hint').textContent='观察模式：'+(mapName||'')+' —— 只读、不会改动。拖动旋转查看。'; }
   else { mp.textContent='⚪ 空闲'; mp.className='modepill m-idle';
-    $('st').textContent='未运行'; $('st').className='pill';
-    $('hint').textContent='相机空闲 —— ▶ 开始采集 建新图；或选一张存图点 📂 观察存图（只读看旧图）。'; }
-  $('open').textContent = mo==='viewing' ? '📂 换图' : '📂 观察存图';
+    $('st').textContent='未运行'; $('st').className='pill'; $('hint').textContent='';
+    renderChooser(); }
 }
-setMode('idle', null);
 
+// ---- 3D 渲染 ----
 function fit(){ const all=data.pts.concat(data.traj); if(all.length<2)return;
   let lo=[1e9,1e9,1e9], hi=[-1e9,-1e9,-1e9];
   for(const p of all)for(let i=0;i<3;i++){lo[i]=Math.min(lo[i],p[i]);hi[i]=Math.max(hi[i],p[i]);}
   center=[(lo[0]+hi[0])/2,(lo[1]+hi[1])/2,(lo[2]+hi[2])/2];
-  const ext=Math.max(hi[0]-lo[0],hi[1]-lo[1],hi[2]-lo[2],1e-3); base=Math.min(W,H)*0.42/(ext/2); haveFit=true;
-}
+  const ext=Math.max(hi[0]-lo[0],hi[1]-lo[1],hi[2]-lo[2],1e-3); base=Math.min(W,H)*0.42/(ext/2); haveFit=true; }
 function project(p){ const dx=p[0]-center[0],dy=p[1]-center[1],dz=p[2]-center[2];
   const ca=Math.cos(yaw),sa=Math.sin(yaw),cb=Math.cos(pitch),sb=Math.sin(pitch);
   const x1=dx*ca+dz*sa,y1=dy,z1=-dx*sa+dz*ca; const x2=x1,y2=y1*cb-z1*sb,z2=y1*sb+z1*cb;
@@ -111,16 +155,13 @@ function draw(){ ctx.fillStyle='#0d0f12'; ctx.fillRect(0,0,W,H); if(!haveFit)fit
 }
 requestAnimationFrame(draw);
 
-async function poll(){ try{ const r=await fetch('map.json?t='+Date.now(),{cache:'no-store'});
-  if(r.ok){ const j=await r.json(); const grew=j.n_lm>0&&(data.n_lm===0||j.n_lm>data.n_lm*1.6);
-    data=j; lastTs=Date.now(); if(grew)haveFit=false;
+async function poll(){ const j=await api('map.json?t='+Date.now());
+  if(j){ const grew=j.n_lm>0&&(data.n_lm===0||j.n_lm>data.n_lm*1.6); data=j; if(grew)haveFit=false;
     $('nlm').textContent=j.n_lm; $('nkf').textContent=j.n_kf;
     if(running){ const st=$('st'); st.textContent=j.state; st.className='pill '+(/track/i.test(j.state)?'tracking':/lost/i.test(j.state)?'lost':'init');
       $('hint').textContent = j.n_lm>0?'':'地图为空 —— 拿起模组缓慢平移（不要只转），对准纹理处初始化'; }
-  } }catch(e){} setTimeout(poll,400); }
+  } setTimeout(poll,400); }
 poll();
-async function pollStatus(){ try{ const r=await fetch('/status'); const j=await r.json(); const mo=j.mode||'idle'; setMode(mo, j.map);
-  if(mo!=='mapping') loadMaps();
-}catch(e){} setTimeout(pollStatus,1200); }
+async function pollStatus(){ await applyStatus(); setTimeout(pollStatus,1200); }
 pollStatus();
 </script></body></html>
