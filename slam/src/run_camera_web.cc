@@ -103,7 +103,9 @@ int main(int argc, char* argv[]) {
     }
     const std::string json_path = web + "/map.json";
     const std::string stop_path = web + "/STOP";
+    const std::string reset_path = web + "/RESET";
     std::remove(stop_path.c_str());
+    std::remove(reset_path.c_str());
 
     std::shared_ptr<stella_vslam::config> cfg;
     try {
@@ -144,6 +146,13 @@ int main(int argc, char* argv[]) {
         slam->feed_monocular_frame(frame, ts, mask);
         if (++n % de == 0) {
             write_map_json(map_pub, frame_pub, json_path);
+            std::ifstream rf(reset_path);
+            if (rf.good()) {
+                rf.close();
+                std::remove(reset_path.c_str());
+                slam->request_reset(); // 清空地图，回到初始化状态
+                spdlog::info("RESET requested: clearing map");
+            }
             std::ifstream sf(stop_path);
             if (sf.good()) {
                 spdlog::info("STOP file found; terminating");

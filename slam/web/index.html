@@ -18,7 +18,9 @@ button:hover{background:#22323e}
   <span>地图点 <span id="nlm" class="pill">0</span></span>
   <span>关键帧 <span id="nkf" class="pill">0</span></span>
   <span>更新 <span id="age" class="pill">–</span></span>
-  <button id="fit">重置视角</button>
+  <button id="fit">复位视角</button>
+  <button id="reset" style="border-color:#7a2c2c;color:#ff9b9b">🗑 清空地图</button>
+  <button id="stop" style="border-color:#2c6a3a;color:#8be8a3">💾 停止存图</button>
   <span id="help">拖动=旋转 · 滚轮=缩放</span>
 </div>
 <canvas id="c"></canvas>
@@ -42,6 +44,8 @@ addEventListener('mousemove',e=>{ if(!drag)return; yaw+=(e.clientX-px)*0.01; pit
   pitch=Math.max(-1.55,Math.min(1.55,pitch)); px=e.clientX; py=e.clientY; });
 cv.addEventListener('wheel',e=>{ e.preventDefault(); zoom*=Math.exp(-e.deltaY*0.001); zoom=Math.max(0.05,Math.min(50,zoom)); },{passive:false});
 document.getElementById('fit').onclick=()=>{ haveFit=false; yaw=0.6; pitch=-0.5; zoom=1; };
+document.getElementById('reset').onclick=async()=>{ if(confirm('清空当前地图、从头重新建图？(SLAM 不停，回到初始化)')){ try{await fetch('/reset');}catch(e){} } };
+document.getElementById('stop').onclick=async()=>{ if(confirm('停止 SLAM 并存图？(进程会退出，需重启才能再建图)')){ try{await fetch('/stop');}catch(e){} } };
 
 function fit(){
   const all=data.pts.concat(data.traj);
