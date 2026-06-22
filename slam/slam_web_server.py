@@ -1,16 +1,55 @@
 #!/usr/bin/env python3
-# 轻量控制服务：服务 ~/slam/web 静态文件(index.html / map.json) + 控制端点。
-# 网页按钮通过这些端点给 run_camera_web 发信号（靠落文件）：
+# 轻量控制服务 + 进程管理：服务 ~/slam/web 静态文件(index.html / map.json) + 端点：
+#   GET /start  -> 启动 run_camera_web（之前相机空闲、不空转）
+#   GET /stop   -> 落 STOP 文件 -> SLAM 优雅退出并存图
 #   GET /reset  -> 落 RESET 文件 -> SLAM 清空地图、回初始化（进程不退）
-#   GET /stop   -> 落 STOP  文件 -> SLAM 优雅退出并存图
+#   GET /status -> {"running": bool}
 # 用法: python3 slam_web_server.py [PORT] [WEBDIR]
-import os, sys, json, posixpath
+import os, sys, json, posixpath, subprocess
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8091
-WEBDIR = os.path.abspath(sys.argv[2] if len(sys.argv) > 2 else os.path.expanduser('~/slam/web'))
+HOME = os.path.expanduser('~')
+WEBDIR = os.path.abspath(sys.argv[2] if len(sys.argv) > 2 else f'{HOME}/slam/web')
+BIN = f'{HOME}/slam/stella_vslam_examples/build/run_camera_web'
+SLAM_CMD = [BIN, '-v', f'{HOME}/slam/orb_vocab.fbow', '-c', f'{HOME}/slam/c920_mono.yaml',
+            '-n', '3', '--web-dir', WEBDIR, '-o', f'{HOME}/slam/map_calib.msg', '--dump-every', '8']
+ENV = dict(os.environ, LD_LIBRARY_PATH=f'{HOME}/slam/deps/lib')
 CT = {'.html': 'text/html; charset=utf-8', '.json': 'application/json',
       '.js': 'text/javascript', '.css': 'text/css'}
+
+
+def slam_running():
+    try:
+        return subprocess.run(['pgrep', '-x', 'run_camera_web'], capture_output=True).returncode == 0
+    except Exception:
+        return False
+
+
+def start_slam():
+    if slam_running():
+        return False, 'already_running'
+    subprocess.run(['pkill', '-f', 'cam_imu_server'], capture_output=True)  # 释放 /dev/video3
+    for f in ('STOP', 'RESET'):
+        try:
+            os.remove(os.path.join(WEBDIR, f))
+        except Exception:
+            pass
+    try:
+        logf = open('/tmp/slam_run.log', 'ab')
+        subprocess.Popen(SLAM_CMD, env=ENV, stdout=logf, stderr=subprocess.STDOUT,
+                         stdin=subprocess.DEVNULL, start_new_session=True)
+        return True, 'started'
+    except Exception as e:
+        return False, str(e)
+
+
+def touch(name):
+    try:
+        open(os.path.join(WEBDIR, name), 'w').close()
+        return True
+    except Exception:
+        return False
 
 
 class H(BaseHTTPRequestHandler):
@@ -30,22 +69,19 @@ class H(BaseHTTPRequestHandler):
         except Exception:
             pass
 
-    def _touch(self, name):
-        try:
-            open(os.path.join(WEBDIR, name), 'w').close()
-            return True
-        except Exception:
-            return False
-
     def do_GET(self):
-        path = self.path.split('?')[0]
-        if path == '/reset':
-            self._send(200, json.dumps({'ok': self._touch('RESET'), 'action': 'reset'})); return
-        if path == '/stop':
-            self._send(200, json.dumps({'ok': self._touch('STOP'), 'action': 'stop'})); return
-        if path == '/':
-            path = '/index.html'
-        rel = posixpath.normpath(path).lstrip('/')
+        p = self.path.split('?')[0]
+        if p == '/start':
+            ok, msg = start_slam(); self._send(200, json.dumps({'ok': ok, 'msg': msg})); return
+        if p == '/stop':
+            self._send(200, json.dumps({'ok': touch('STOP'), 'action': 'stop'})); return
+        if p == '/reset':
+            self._send(200, json.dumps({'ok': touch('RESET'), 'action': 'reset'})); return
+        if p == '/status':
+            self._send(200, json.dumps({'running': slam_running()})); return
+        if p == '/':
+            p = '/index.html'
+        rel = posixpath.normpath(p).lstrip('/')
         fp = os.path.abspath(os.path.join(WEBDIR, rel))
         if not fp.startswith(WEBDIR) or not os.path.isfile(fp):
             self._send(404, json.dumps({'error': 'not found'})); return
@@ -59,7 +95,7 @@ class H(BaseHTTPRequestHandler):
 
 def main():
     srv = ThreadingHTTPServer(('0.0.0.0', PORT), H)
-    print(f'[slam_web] http://0.0.0.0:{PORT}/  dir={WEBDIR}  endpoints: /reset /stop', flush=True)
+    print(f'[slam_web] http://0.0.0.0:{PORT}/  dir={WEBDIR}  endpoints: /start /stop /reset /status', flush=True)
     srv.serve_forever()
 
 

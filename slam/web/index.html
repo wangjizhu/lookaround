@@ -19,6 +19,7 @@ button:hover{background:#22323e}
   <span>关键帧 <span id="nkf" class="pill">0</span></span>
   <span>更新 <span id="age" class="pill">–</span></span>
   <button id="fit">复位视角</button>
+  <button id="start" style="border-color:#2c4a7a;color:#9bbcff">▶ 开始采集</button>
   <button id="reset" style="border-color:#7a2c2c;color:#ff9b9b">🗑 清空地图</button>
   <button id="stop" style="border-color:#2c6a3a;color:#8be8a3">💾 停止存图</button>
   <span id="help">拖动=旋转 · 滚轮=缩放</span>
@@ -45,7 +46,19 @@ addEventListener('mousemove',e=>{ if(!drag)return; yaw+=(e.clientX-px)*0.01; pit
 cv.addEventListener('wheel',e=>{ e.preventDefault(); zoom*=Math.exp(-e.deltaY*0.001); zoom=Math.max(0.05,Math.min(50,zoom)); },{passive:false});
 document.getElementById('fit').onclick=()=>{ haveFit=false; yaw=0.6; pitch=-0.5; zoom=1; };
 document.getElementById('reset').onclick=async()=>{ if(confirm('清空当前地图、从头重新建图？(SLAM 不停，回到初始化)')){ try{await fetch('/reset');}catch(e){} } };
-document.getElementById('stop').onclick=async()=>{ if(confirm('停止 SLAM 并存图？(进程会退出，需重启才能再建图)')){ try{await fetch('/stop');}catch(e){} } };
+document.getElementById('stop').onclick=async()=>{ if(confirm('停止 SLAM 并存图？(进程会退出，可再点 ▶开始采集 重新开始)')){ try{await fetch('/stop');}catch(e){} } };
+document.getElementById('start').onclick=async()=>{ try{const r=await fetch('/start');const j=await r.json(); if(!j.ok&&j.msg!=='already_running')alert('启动失败: '+j.msg);}catch(e){alert('启动请求失败');} };
+let running=false;
+function setRunning(r){ running=r;
+  document.getElementById('start').style.display=r?'none':'inline-block';
+  document.getElementById('reset').style.display=r?'inline-block':'none';
+  document.getElementById('stop').style.display=r?'inline-block':'none';
+  if(!r){ const st=document.getElementById('st'); st.textContent='未运行'; st.className='pill init';
+    document.getElementById('hint').textContent='相机空闲 —— 点 ▶开始采集 启动 SLAM'; }
+}
+setRunning(false);
+async function pollStatus(){ try{ const r=await fetch('/status'); setRunning((await r.json()).running); }catch(e){} setTimeout(pollStatus,1000); }
+pollStatus();
 
 function fit(){
   const all=data.pts.concat(data.traj);
@@ -102,11 +115,13 @@ async function poll(){
       const grew = j.n_lm>0 && (data.n_lm===0 || j.n_lm>data.n_lm*1.6);
       data=j; lastTs=Date.now();
       if(grew) haveFit=false;
-      const st=document.getElementById('st');
-      st.textContent=j.state; st.className='pill '+( /track/i.test(j.state)?'tracking': /lost/i.test(j.state)?'lost':'init');
       document.getElementById('nlm').textContent=j.n_lm;
       document.getElementById('nkf').textContent=j.n_kf;
-      document.getElementById('hint').textContent = j.n_lm>0 ? '' : '地图为空 —— 拿起模组缓慢平移（不要只转），对准纹理丰富处以初始化';
+      if(running){
+        const st=document.getElementById('st');
+        st.textContent=j.state; st.className='pill '+( /track/i.test(j.state)?'tracking': /lost/i.test(j.state)?'lost':'init');
+        document.getElementById('hint').textContent = j.n_lm>0 ? '' : '地图为空 —— 拿起模组缓慢平移（不要只转），对准纹理丰富处以初始化';
+      }
     }
   }catch(e){}
   setTimeout(poll,400);
